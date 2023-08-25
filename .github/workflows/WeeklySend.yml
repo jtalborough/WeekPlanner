@@ -1,0 +1,48 @@
+name: Weekly Email
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      
+      - name: Rename PDF
+        run: |
+          FILENAME=$(ls *Template*.pdf)
+          WEEK=$(date +\%U)
+          DATE=$(date +\%Y-\%m-\%d)
+          NEW_FILENAME="Week${WEEK}_${DATE}.pdf"
+          mv "$FILENAME" "$NEW_FILENAME"
+          echo "NEW_FILENAME=${NEW_FILENAME}" >> $GITHUB_ENV
+
+      - name: Create JSON Payload
+        env:
+          TO_EMAIL: ${{ secrets.TO_EMAIL }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+        run: |
+          ENCODED_CONTENT=$(base64 -w 0 $NEW_FILENAME)
+          cat <<EOL > payload.json
+          {
+            "personalizations": [ { "to": [ { "email": "$TO_EMAIL" } ] } ],
+            "from": { "email": "$FROM_EMAIL" },
+            "subject": "Weekly PDF",
+            "content": [ { "type": "text/plain", "value": "Here is your weekly PDF." } ],
+            "attachments": [ { "content": "$ENCODED_CONTENT", "type": "application/pdf", "filename": "$NEW_FILENAME" } ]
+          }
+          EOL
+
+      - name: Send Email using SendGrid
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+        run: |
+          curl -X "POST" "https://api.sendgrid.com/v3/mail/send" \
+               -H "Authorization: Bearer $SENDGRID_API_KEY" \
+               -H "Content-Type: application/json" \
+               --data @payload.json
