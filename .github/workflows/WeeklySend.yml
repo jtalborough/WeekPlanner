@@ -1,0 +1,33 @@
+name: Weekly Email
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      
+      - name: Rename PDF
+        run: |
+          FILENAME=$(ls *Template*.pdf)
+          WEEK=$(date +\%U)
+          DATE=$(date +\%Y-\%m-\%d)
+          NEW_FILENAME="Week${WEEK}_${DATE}.pdf"
+          mv "$FILENAME" "$NEW_FILENAME"
+
+      - name: Send Email using SendGrid
+        uses: peter-evans/sendgrid-action@v1
+        with:
+          server: https://api.sendgrid.com/v3/mail/send
+          key: ${{ secrets.SENDGRID_API_KEY }}
+          from: ${{ secrets.FROM_EMAIL }}
+          to: ${{ secrets.TO_EMAIL }}
+          subject: "Weekly PDF"
+          body: "Here is your weekly PDF."
+          attachment: ${{ github.workspace }}/Week${{ steps.vars.outputs.WEEK }}_${{ steps.vars.outputs.DATE }}.pdf
